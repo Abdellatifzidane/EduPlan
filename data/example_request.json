@@ -1,0 +1,58 @@
+{
+  "configuration": {
+    "num_rooms": 8,
+    "num_teachers": 7,
+    "num_classes": 3,
+    "day_start": "08:00:00",
+    "day_end": "19:00:00",
+    "session_duration": 90,
+    "break_duration": 15,
+    "lunch_break_start": "13:00:00",
+    "lunch_break_end": "14:00:00",
+    "days_in_person": 4,
+    "days_remote": 1,
+    "max_hours_per_day_per_teacher": 9,
+    "prevent_same_teacher_parallel": true
+  },
+  "teacher_workloads": [
+    {
+      "teacher_name": "Lyes",
+      "total_hours_per_week": 9,
+      "class_assignments": {
+        "Classe A": 4.5,
+        "Classe B": 4.5
+      }
+    },
+    {
+      "teacher_name": "Marie",
+      "total_hours_per_week": 12,
+      "class_assignments": {
+        "Classe A": 6,
+        "Classe B": 3,
+        "Classe C": 3
+      }
+    },
+    {
+      "teacher_name": "Jean",
+      "total_hours_per_week": 9,
+      "class_assignments": {
+        "Classe B": 4.5,
+        "Classe C": 4.5
+      }
+    }
+  ],
+  "constraints": [
+    {
+      "teacher_name": "Lyes",
+      "constraint_text": "Je serai disponible lundi, mardi, vendredi matin de 08:00 - 13:00"
+    },
+    {
+      "teacher_name": "Marie",
+      "constraint_text": "Je ne serai pas disponible mercredi"
+    },
+    {
+      "teacher_name": "Jean",
+      "constraint_text": "Pas de cours après 16h le vendredi"
+    }
+  ]
+}
