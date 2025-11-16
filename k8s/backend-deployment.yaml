@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: edupplan-backend-deployment
+  namespace: edupplan
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: edupplan-backend
+  template:
+    metadata:
+      labels:
+        app: edupplan-backend
+    spec:
+      containers:
+        - name: edupplan-backend
+          image: gcr.io/total-casing-477316-s1/edupplan-backend:v1
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000

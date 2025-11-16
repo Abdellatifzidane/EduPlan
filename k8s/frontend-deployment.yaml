@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: edupplan-frontend-deployment
+  namespace: edupplan
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: edupplan-frontend
+  template:
+    metadata:
+      labels:
+        app: edupplan-frontend
+    spec:
+      containers:
+        - name: edupplan-frontend
+          image: gcr.io/total-casing-477316-s1/edupplan-frontend:v2 #gcr.io/total-casing-477316-s1/edupplan-frontend:v1
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8501

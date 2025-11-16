@@ -12,7 +12,7 @@ st.set_page_config(
 )
 
 # URL de l'API
-API_URL = "http://localhost:8000"
+API_URL = "http://edupplan-backend-service:8000" #http://localhost:8000
 
 
 def main():

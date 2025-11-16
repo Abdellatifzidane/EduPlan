@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: edupplan-frontend-service
+  namespace: edupplan
+spec:
+  type: LoadBalancer  #ClusterIP
+  selector:
+    app: edupplan-frontend
+  ports:
+    - name: http
+      port: 8501        # port vu dans le cluster
+      targetPort: 8501  # port dans le conteneur Streamlit

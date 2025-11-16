@@ -1,0 +1,27 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: edupplan-ingress
+  namespace: edupplan
+  annotations:
+    kubernetes.io/ingress.class: "gce"
+spec:
+  rules:
+    - http:
+        paths:
+          # Frontend Streamlit sur /
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: edupplan-frontend-service
+                port:
+                  number: 8501
+          # Backend FastAPI Swagger sur /docs
+          - path: /docs
+            pathType: Prefix
+            backend:
+              service:
+                name: edupplan-backend-service
+                port:
+                  number: 8000
