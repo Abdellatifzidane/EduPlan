@@ -49,6 +49,7 @@ class SystemConfiguration(BaseModel):
     # Contraintes
     max_hours_per_day_per_teacher: int = Field(default=9, description="Max heures/jour/prof")
     prevent_same_teacher_parallel: bool = Field(default=True, description="Interdire même prof sur 2 classes simultanément")
+    max_consecutive_sessions: int = Field(default=3, description="Max séances consécutives pour un (prof, classe)")
 
 
 class TeacherWorkload(BaseModel):
@@ -81,11 +82,34 @@ class ParsedConstraint(BaseModel):
     unavailabilities: Optional[List[TeacherAvailability]] = None
 
 
+class StructuredAvailability(BaseModel):
+    """Disponibilités structurées d'un professeur (sans NLP)"""
+    teacher_name: str
+    availabilities: List[TeacherAvailability]
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "teacher_name": "Prof_1",
+                "availabilities": [
+                    {
+                        "teacher_name": "Prof_1",
+                        "day": "lundi",
+                        "time_slots": [
+                            {"start": "08:00:00", "end": "13:00:00"}
+                        ]
+                    }
+                ]
+            }
+        }
+
+
 class ScheduleRequest(BaseModel):
     """Requête pour générer un planning"""
     configuration: SystemConfiguration
     teacher_workloads: List[TeacherWorkload]
-    constraints: List[NaturalLanguageConstraint]
+    constraints: Optional[List[NaturalLanguageConstraint]] = None  # Deprecated
+    structured_availabilities: Optional[List[StructuredAvailability]] = None  # Nouveau format
 
 
 class ScheduleSlot(BaseModel):

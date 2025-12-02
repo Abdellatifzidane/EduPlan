@@ -13,13 +13,13 @@ from ..models.schemas import (
 
 
 class ConstraintParser:
-    """Agent NLP utilisant Grok (xAI) pour parser les contraintes en langage naturel"""
+    """Agent NLP utilisant Groq pour parser les contraintes en langage naturel"""
 
     def __init__(self, api_key: str = None):
-        self.api_key = api_key or os.getenv("XAI_API_KEY") or os.getenv("OPENAI_API_KEY")
-        self.model = os.getenv("XAI_MODEL", "grok-beta")
-        # Configuration pour utiliser l'API Grok de xAI
-        self.base_url = os.getenv("XAI_BASE_URL", "https://api.x.ai/v1")
+        self.api_key = api_key or os.getenv("GROQ_API_KEY") or os.getenv("OPENAI_API_KEY")
+        self.model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+        # Configuration pour utiliser l'API Groq
+        self.base_url = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
         self.client = OpenAI(
             api_key=self.api_key,
             base_url=self.base_url
@@ -39,7 +39,7 @@ class ConstraintParser:
                     "content": """Tu es un assistant spécialisé dans l'analyse de contraintes de disponibilité pour des plannings scolaires.
                     Tu dois extraire les informations de disponibilité et les retourner au format JSON structuré.
 
-                    Jours valides: lundi, mardi, mercredi, jeudi, vendredi, samedi, dimanche
+                    Jours valides: lundi, mardi, mercredi, jeudi, vendredi
 
                     Format de sortie attendu:
                     {

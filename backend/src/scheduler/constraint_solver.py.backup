@@ -145,19 +145,6 @@ class ScheduleGenerator:
         for constraint in constraints:
             t_idx = teachers.index(constraint.teacher_name)
 
-            # Identifier les jours où le prof est disponible
-            available_days = set(av.day.value for av in constraint.availabilities)
-
-            # ÉTAPE 1: Interdire TOUS les jours NON mentionnés
-            for d_idx, day in enumerate(self.days):
-                if day not in available_days:
-                    # Ce jour n'est PAS disponible -> interdire TOUS les créneaux
-                    for s_idx in range(len(self.time_slots)):
-                        for c_idx in range(len(classes)):
-                            for r_idx in range(len(rooms)):
-                                self.model.Add(x[(t_idx, c_idx, d_idx, s_idx, r_idx)] == 0)
-
-            # ÉTAPE 2: Pour les jours disponibles, vérifier les créneaux horaires
             for availability in constraint.availabilities:
                 d_idx = self.days.index(availability.day.value)
 

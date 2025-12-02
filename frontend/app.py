@@ -12,7 +12,7 @@ st.set_page_config(
 )
 
 # URL de l'API
-API_URL = "http://edupplan-backend-service:8000" #http://localhost:8000
+API_URL = "http://localhost:8000"  # http://edupplan-backend-service:8000 pour Kubernetes
 
 
 def main():
@@ -63,6 +63,13 @@ def generate_schedule_page():
 
     with col5:
         max_hours_per_day = st.number_input("Max heures/jour/prof", min_value=1, value=9)
+        max_consecutive = st.number_input(
+            "Max séances consécutives (prof, classe)",
+            min_value=1,
+            max_value=10,
+            value=3,
+            help="Maximum de séances consécutives qu'un prof peut donner à la même classe"
+        )
         prevent_parallel = st.checkbox(
             "Interdire même prof sur 2 classes simultanément",
             value=True
@@ -126,35 +133,99 @@ def generate_schedule_page():
                 "class_assignments": class_assignments
             })
 
-    # Section 3: Contraintes en langage naturel
-    st.subheader("3. Contraintes de Disponibilité (Langage Naturel)")
+    # Section 3: Contraintes de Disponibilité (Interface Visuelle)
+    st.subheader("3. Disponibilités des Professeurs")
 
-    num_constraints = st.number_input(
-        "Nombre de contraintes",
-        min_value=0,
-        max_value=20,
-        value=1
+    # Générer les créneaux horaires basés sur la configuration
+    def generate_time_slots_for_ui(day_start, day_end, session_duration, break_duration, lunch_start, lunch_end):
+        from datetime import datetime, timedelta
+        slots = []
+        current = datetime.combine(datetime.today(), day_start)
+        end = datetime.combine(datetime.today(), day_end)
+        lunch_s = datetime.combine(datetime.today(), lunch_start)
+        lunch_e = datetime.combine(datetime.today(), lunch_end)
+
+        while current < end:
+            slot_end = current + timedelta(minutes=session_duration)
+
+            # Éviter la pause déjeuner
+            if current < lunch_e and slot_end > lunch_s:
+                current = lunch_e
+                continue
+
+            if slot_end <= end:
+                slots.append((current.time().strftime("%H:%M"), slot_end.time().strftime("%H:%M")))
+
+            current = slot_end + timedelta(minutes=break_duration)
+
+        return slots
+
+    time_slots_for_ui = generate_time_slots_for_ui(
+        day_start, day_end, session_duration, break_duration, lunch_start, lunch_end
     )
 
-    constraints = []
-    for i in range(num_constraints):
-        with st.expander(f"Contrainte {i+1}"):
-            teacher_name = st.text_input(
-                "Nom du professeur",
-                key=f"constraint_teacher_{i}",
-                value=teacher_workloads[0]["teacher_name"] if teacher_workloads else "Prof_1"
-            )
-            constraint_text = st.text_area(
-                "Contrainte en langage naturel",
-                key=f"constraint_text_{i}",
-                placeholder="Ex: Je serai disponible lundi, mardi, vendredi matin de 08:00 - 13:00",
-                height=100
-            )
+    # Liste des jours
+    days = ["lundi", "mardi", "mercredi", "jeudi", "vendredi"]
 
-            if constraint_text.strip():
-                constraints.append({
+    # Sélectionner les profs pour lesquels définir les disponibilités
+    num_profs_availabilities = st.number_input(
+        "Nombre de profs avec contraintes de disponibilité",
+        min_value=0,
+        max_value=num_teachers,
+        value=min(3, num_teachers)
+    )
+
+    structured_availabilities = []
+
+    for i in range(num_profs_availabilities):
+        with st.expander(f"📅 Disponibilités - {teacher_workloads[i]['teacher_name'] if i < len(teacher_workloads) else f'Prof_{i+1}'}"):
+            teacher_name = teacher_workloads[i]['teacher_name'] if i < len(teacher_workloads) else f"Prof_{i+1}"
+
+            st.markdown(f"**Cochez les créneaux disponibles pour {teacher_name}**")
+
+            # Créer une grille interactive
+            teacher_availabilities = {}
+
+            # Header avec les jours
+            cols = st.columns([2] + [1] * len(days))
+            cols[0].write("**Créneau**")
+            for idx, day in enumerate(days):
+                cols[idx + 1].write(f"**{day.capitalize()}**")
+
+            # Créer une ligne par créneau horaire
+            for slot_idx, (start, end) in enumerate(time_slots_for_ui):
+                cols = st.columns([2] + [1] * len(days))
+                cols[0].write(f"{start} - {end}")
+
+                for day_idx, day in enumerate(days):
+                    checkbox_key = f"avail_{i}_{day}_{slot_idx}"
+                    is_checked = cols[day_idx + 1].checkbox(
+                        f"Disponible {day} {start}-{end}",
+                        key=checkbox_key,
+                        label_visibility="collapsed"
+                    )
+
+                    if is_checked:
+                        if day not in teacher_availabilities:
+                            teacher_availabilities[day] = []
+                        teacher_availabilities[day].append((start, end))
+
+            # Convertir en format API
+            availabilities_list = []
+            for day, slots in teacher_availabilities.items():
+                if slots:
+                    # Fusionner les créneaux consécutifs
+                    time_slots = [{"start": slot[0], "end": slot[1]} for slot in slots]
+                    availabilities_list.append({
+                        "teacher_name": teacher_name,
+                        "day": day,
+                        "time_slots": time_slots
+                    })
+
+            if availabilities_list:
+                structured_availabilities.append({
                     "teacher_name": teacher_name,
-                    "constraint_text": constraint_text
+                    "availabilities": availabilities_list
                 })
 
     # Bouton de génération
@@ -177,10 +248,11 @@ def generate_schedule_page():
                         "days_in_person": days_in_person,
                         "days_remote": days_remote,
                         "max_hours_per_day_per_teacher": max_hours_per_day,
-                        "prevent_same_teacher_parallel": prevent_parallel
+                        "prevent_same_teacher_parallel": prevent_parallel,
+                        "max_consecutive_sessions": max_consecutive
                     },
                     "teacher_workloads": teacher_workloads,
-                    "constraints": constraints
+                    "structured_availabilities": structured_availabilities
                 }
 
                 # Appeler l'API

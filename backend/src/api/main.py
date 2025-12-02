@@ -35,11 +35,15 @@ app.add_middleware(
 @app.on_event("startup")
 def startup_event():
     """Initialiser la base de données au démarrage"""
-    try:
-        init_db()
-        print("✓ Base de données SQLite initialisée")
-    except Exception as e:
-        print(f"⚠ Base de données désactivée: {e}")
+    import os
+    if os.getenv("DATABASE_URL"):
+        try:
+            init_db()
+            print("✓ Base de données initialisée")
+        except Exception as e:
+            print(f"⚠ Erreur base de données: {e}")
+    else:
+        print("ℹ Mode sans base de données")
 
 
 @app.get("/")
@@ -88,22 +92,36 @@ async def parse_constraint(constraint: NaturalLanguageConstraint):
 
 @app.post("/api/schedule/generate", response_model=ScheduleResponse)
 async def generate_schedule(
-    request: ScheduleRequest,
-    db: Session = Depends(get_db)
+    request: ScheduleRequest
 ):
     """
     Génère un planning complet basé sur la configuration et les contraintes
 
     Workflow:
-    1. Parse les contraintes en langage naturel avec l'agent NLP
+    1. Utilise les disponibilités structurées (ou parse le langage naturel si fourni)
     2. Génère le planning avec OR-Tools
     3. Sauvegarde dans la base de données
     4. Retourne le planning + visualisation HTML
     """
     try:
-        # Étape 1: Parser les contraintes avec OpenAI
-        parser = ConstraintParser()
-        parsed_constraints = parser.parse_batch(request.constraints)
+        # Étape 1: Obtenir les contraintes parsées
+        parsed_constraints = []
+
+        # Nouveau format: disponibilités structurées (prioritaire)
+        if request.structured_availabilities:
+            # Convertir directement en ParsedConstraint
+            from ..models.schemas import ParsedConstraint
+            parsed_constraints = [
+                ParsedConstraint(
+                    teacher_name=avail.teacher_name,
+                    availabilities=avail.availabilities
+                )
+                for avail in request.structured_availabilities
+            ]
+        # Ancien format: langage naturel (deprecated mais gardé pour compatibilité)
+        elif request.constraints:
+            parser = ConstraintParser()
+            parsed_constraints = parser.parse_batch(request.constraints)
 
         # Étape 2: Générer le planning avec OR-Tools
         generator = ScheduleGenerator(request.configuration)
@@ -145,8 +163,7 @@ async def generate_schedule(
 @app.post("/api/schedule/modify")
 async def modify_schedule(
     schedule_id: str,
-    new_constraint: NaturalLanguageConstraint,
-    db: Session = Depends(get_db)
+    new_constraint: NaturalLanguageConstraint
 ):
     """
     Modifie un planning existant en ajoutant une nouvelle contrainte

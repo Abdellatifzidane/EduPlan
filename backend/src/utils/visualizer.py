@@ -54,10 +54,36 @@ class ScheduleVisualizer:
         return df
 
     def render_html(self, schedule: Schedule) -> str:
-        """Génère une visualisation HTML du planning"""
-        df = self.to_dataframe(schedule)
+        """Génère une visualisation HTML du planning en format grille calendrier avec onglets par classe"""
 
-        # Créer le tableau HTML avec style
+        # Organiser les slots par jour et horaire
+        days_fr = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi"]
+        days_enum = [DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY, DayOfWeek.THURSDAY, DayOfWeek.FRIDAY]
+
+        # Extraire toutes les classes
+        all_classes = sorted(list(set(slot.class_name for slot in schedule.slots)))
+
+        # Extraire tous les créneaux horaires uniques
+        time_slots = set()
+        for slot in schedule.slots:
+            time_slots.add((slot.start_time, slot.end_time))
+        time_slots = sorted(list(time_slots))
+
+        # Créer une grille par classe: dict[class_name][day][time_slot] = list of courses
+        grids = {}
+        for class_name in all_classes:
+            grids[class_name] = {}
+            for day_enum in days_enum:
+                grids[class_name][day_enum] = {}
+                for time_slot in time_slots:
+                    grids[class_name][day_enum][time_slot] = []
+
+        # Remplir les grilles avec les cours
+        for slot in schedule.slots:
+            time_key = (slot.start_time, slot.end_time)
+            grids[slot.class_name][slot.day][time_key].append(slot)
+
+        # Générer le HTML
         html = f"""
         <!DOCTYPE html>
         <html>
@@ -86,63 +112,6 @@ class ScheduleVisualizer:
                     margin: 10px 0 0 0;
                     opacity: 0.9;
                 }}
-                .schedule-container {{
-                    background: white;
-                    border-radius: 10px;
-                    padding: 20px;
-                    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-                }}
-                table {{
-                    width: 100%;
-                    border-collapse: collapse;
-                    margin-top: 20px;
-                }}
-                th {{
-                    background-color: #667eea;
-                    color: white;
-                    padding: 12px;
-                    text-align: left;
-                    font-weight: 600;
-                    text-transform: uppercase;
-                    font-size: 0.85em;
-                    letter-spacing: 0.5px;
-                }}
-                td {{
-                    padding: 12px;
-                    border-bottom: 1px solid #e0e0e0;
-                }}
-                tr:hover {{
-                    background-color: #f8f9fa;
-                }}
-                .day-cell {{
-                    font-weight: 600;
-                    color: #667eea;
-                }}
-                .time-cell {{
-                    color: #666;
-                    font-family: 'Courier New', monospace;
-                }}
-                .teacher-cell {{
-                    color: #2c3e50;
-                    font-weight: 500;
-                }}
-                .class-badge {{
-                    display: inline-block;
-                    padding: 4px 12px;
-                    border-radius: 15px;
-                    background-color: #e3f2fd;
-                    color: #1976d2;
-                    font-size: 0.9em;
-                    font-weight: 500;
-                }}
-                .room-badge {{
-                    display: inline-block;
-                    padding: 4px 12px;
-                    border-radius: 15px;
-                    background-color: #f3e5f5;
-                    color: #7b1fa2;
-                    font-size: 0.9em;
-                }}
                 .stats {{
                     display: flex;
                     justify-content: space-around;
@@ -168,11 +137,132 @@ class ScheduleVisualizer:
                     margin-top: 5px;
                     font-size: 0.9em;
                 }}
+                .schedule-container {{
+                    background: white;
+                    border-radius: 10px;
+                    padding: 20px;
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                    overflow-x: auto;
+                }}
+                table {{
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin-top: 20px;
+                }}
+                th {{
+                    background-color: #667eea;
+                    color: white;
+                    padding: 15px 10px;
+                    text-align: center;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                    font-size: 0.9em;
+                    letter-spacing: 0.5px;
+                    border: 1px solid #5568d3;
+                }}
+                th.time-header {{
+                    background-color: #764ba2;
+                    min-width: 100px;
+                }}
+                td {{
+                    padding: 0;
+                    border: 1px solid #ddd;
+                    vertical-align: top;
+                    min-height: 80px;
+                    position: relative;
+                }}
+                td.time-cell {{
+                    background-color: #f8f9fa;
+                    padding: 15px 10px;
+                    text-align: center;
+                    font-weight: 600;
+                    color: #764ba2;
+                    font-family: 'Courier New', monospace;
+                    font-size: 0.9em;
+                    white-space: nowrap;
+                }}
+                .course-box {{
+                    padding: 10px;
+                    margin: 5px;
+                    border-radius: 8px;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white;
+                    font-size: 0.85em;
+                    line-height: 1.6;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                    min-height: 70px;
+                }}
+                .course-time {{
+                    font-weight: bold;
+                    font-size: 0.95em;
+                    margin-bottom: 8px;
+                    padding-bottom: 5px;
+                    border-bottom: 1px solid rgba(255,255,255,0.3);
+                }}
+                .course-info {{
+                    margin: 3px 0;
+                }}
+                .course-label {{
+                    opacity: 0.9;
+                    font-size: 0.8em;
+                }}
+                .empty-cell {{
+                    background-color: #fafafa;
+                    min-height: 80px;
+                }}
+                .tabs {{
+                    display: flex;
+                    justify-content: center;
+                    gap: 10px;
+                    margin: 20px 0;
+                    flex-wrap: wrap;
+                }}
+                .tab-button {{
+                    padding: 12px 24px;
+                    background: white;
+                    border: 2px solid #667eea;
+                    color: #667eea;
+                    border-radius: 8px;
+                    cursor: pointer;
+                    font-weight: 600;
+                    transition: all 0.3s;
+                    font-size: 1em;
+                }}
+                .tab-button:hover {{
+                    background: #f0f4ff;
+                }}
+                .tab-button.active {{
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white;
+                    transform: translateY(-2px);
+                    box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+                }}
+                .tab-content {{
+                    display: none;
+                }}
+                .tab-content.active {{
+                    display: block;
+                }}
             </style>
+            <script>
+                function showTab(className) {{
+                    // Cacher tous les onglets
+                    document.querySelectorAll('.tab-content').forEach(tab => {{
+                        tab.classList.remove('active');
+                    }});
+                    document.querySelectorAll('.tab-button').forEach(btn => {{
+                        btn.classList.remove('active');
+                    }});
+
+                    // Afficher l'onglet sélectionné
+                    document.getElementById('tab-' + className).classList.add('active');
+                    document.querySelector('[data-class="' + className + '"]').classList.add('active');
+                }}
+            </script>
         </head>
         <body>
             <div class="header">
-                <h1>📅 Planning Scolaire</h1>
+                <h1>📅 Planning Scolaire par Classe</h1>
                 <p>ID: {schedule.schedule_id}</p>
                 <p>Généré le: {datetime.fromisoformat(schedule.created_at).strftime("%d/%m/%Y à %H:%M")}</p>
             </div>
@@ -187,7 +277,7 @@ class ScheduleVisualizer:
                     <div class="stat-label">Professeurs</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-value">{len(set(s.class_name for s in schedule.slots))}</div>
+                    <div class="stat-value">{len(all_classes)}</div>
                     <div class="stat-label">Classes</div>
                 </div>
                 <div class="stat-card">
@@ -196,35 +286,79 @@ class ScheduleVisualizer:
                 </div>
             </div>
 
-            <div class="schedule-container">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Jour</th>
-                            <th>Horaire</th>
-                            <th>Professeur</th>
-                            <th>Classe</th>
-                            <th>Salle</th>
-                        </tr>
-                    </thead>
-                    <tbody>
+            <div class="tabs">
         """
 
-        for _, row in df.iterrows():
+        # Créer les boutons d'onglets
+        for idx, class_name in enumerate(all_classes):
+            active_class = "active" if idx == 0 else ""
+            # Nettoyer le nom de classe pour l'ID
+            clean_name = class_name.replace(" ", "-").replace("'", "")
+            html += f'<button class="tab-button {active_class}" data-class="{clean_name}" onclick="showTab(\'{clean_name}\')">🎓 {class_name}</button>\n'
+
+        html += "</div>\n"
+
+        # Créer le contenu de chaque onglet
+        for idx, class_name in enumerate(all_classes):
+            active_class = "active" if idx == 0 else ""
+            clean_name = class_name.replace(" ", "-").replace("'", "")
+            grid = grids[class_name]
+
             html += f"""
-                        <tr>
-                            <td class="day-cell">{row['Jour']}</td>
-                            <td class="time-cell">{row['Heure début']} - {row['Heure fin']}</td>
-                            <td class="teacher-cell">{row['Professeur']}</td>
-                            <td><span class="class-badge">{row['Classe']}</span></td>
-                            <td><span class="room-badge">{row['Salle']}</span></td>
-                        </tr>
+            <div id="tab-{clean_name}" class="tab-content {active_class}">
+                <div class="schedule-container">
+                    <h2 style="text-align: center; color: #667eea; margin-bottom: 20px;">Planning de {class_name}</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th class="time-header">Horaires</th>
+            """
+
+            # En-tête avec les jours
+            for day_name in days_fr:
+                html += f"<th>{day_name}</th>\n"
+
+            html += """
+                            </tr>
+                        </thead>
+                        <tbody>
+            """
+
+            # Lignes pour chaque créneau horaire
+            for time_slot in time_slots:
+                start_time, end_time = time_slot
+                html += f"""
+                            <tr>
+                                <td class="time-cell">{start_time.strftime("%H:%M")}<br>-<br>{end_time.strftime("%H:%M")}</td>
+                """
+
+                # Colonnes pour chaque jour
+                for day_enum in days_enum:
+                    courses = grid[day_enum][time_slot]
+                    if courses:
+                        html += "<td>"
+                        for course in courses:
+                            html += f"""
+                                <div class="course-box">
+                                    <div class="course-time">⏰ {course.start_time.strftime("%H:%M")} - {course.end_time.strftime("%H:%M")}</div>
+                                    <div class="course-info">👨‍🏫 <span class="course-label">Prof:</span> {course.teacher}</div>
+                                    <div class="course-info">🚪 <span class="course-label">Salle:</span> {course.room}</div>
+                                </div>
+                            """
+                        html += "</td>"
+                    else:
+                        html += '<td class="empty-cell"></td>'
+
+                html += "</tr>\n"
+
+            html += """
+                        </tbody>
+                    </table>
+                </div>
+            </div>
             """
 
         html += """
-                    </tbody>
-                </table>
-            </div>
         </body>
         </html>
         """
