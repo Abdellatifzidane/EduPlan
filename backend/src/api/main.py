@@ -4,16 +4,21 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 from typing import List
 import uuid
+import os
 
 from ..database.database import get_db, init_db
+from ..database import crud
 from ..models.schemas import (
     ScheduleRequest,
     ScheduleResponse,
     Schedule,
-    NaturalLanguageConstraint
+    NaturalLanguageConstraint,
+    ModificationRequest,
+    ModificationResponse
 )
 from ..scheduler.constraint_solver import ScheduleGenerator
 from ..nlp_agent.constraint_parser import ConstraintParser
+from ..nlp_agent.agent_modifier import AgentModifier
 from ..utils.visualizer import ScheduleVisualizer
 
 app = FastAPI(
@@ -92,7 +97,8 @@ async def parse_constraint(constraint: NaturalLanguageConstraint):
 
 @app.post("/api/schedule/generate", response_model=ScheduleResponse)
 async def generate_schedule(
-    request: ScheduleRequest
+    request: ScheduleRequest,
+    db: Session = Depends(get_db)
 ):
     """
     Génère un planning complet basé sur la configuration et les contraintes
@@ -143,12 +149,17 @@ async def generate_schedule(
         visualizer = ScheduleVisualizer()
         html_output = visualizer.render_html(schedule)
 
-        # Étape 5: Sauvegarder dans la base de données (optionnel)
-        # TODO: Implémenter la sauvegarde en DB
+        # Étape 5: Sauvegarder dans la base de données
+        try:
+            crud.save_schedule(db, schedule, request.teacher_workloads)
+            save_message = " et sauvegardé dans la base de données"
+        except Exception as e:
+            print(f"⚠️ Erreur sauvegarde BD: {e}")
+            save_message = " (non sauvegardé)"
 
         return ScheduleResponse(
             success=True,
-            message=f"Planning généré avec succès: {len(slots)} créneaux créés",
+            message=f"Planning généré avec succès: {len(slots)} créneaux créés{save_message}",
             schedule=schedule,
             visual_html=html_output
         )
@@ -160,20 +171,151 @@ async def generate_schedule(
         )
 
 
-@app.post("/api/schedule/modify")
-async def modify_schedule(
-    schedule_id: str,
-    new_constraint: NaturalLanguageConstraint
-):
+@app.get("/api/schedules")
+async def get_schedules(db: Session = Depends(get_db), skip: int = 0, limit: int = 100):
     """
-    Modifie un planning existant en ajoutant une nouvelle contrainte
+    Récupérer tous les plannings sauvegardés
+    """
+    try:
+        schedules = crud.get_all_schedules(db, skip=skip, limit=limit)
 
-    TODO: Implémenter la logique de modification incrémentale
+        result = []
+        for schedule_model in schedules:
+            result.append({
+                "schedule_id": schedule_model.schedule_id,
+                "created_at": schedule_model.created_at.isoformat(),
+                "num_slots": len(schedule_model.slots),
+                "configuration": {
+                    "num_rooms": schedule_model.configuration.num_rooms,
+                    "num_teachers": schedule_model.configuration.num_teachers,
+                    "num_classes": schedule_model.configuration.num_classes
+                }
+            })
+
+        return {
+            "success": True,
+            "count": len(result),
+            "schedules": result
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur: {str(e)}")
+
+
+@app.get("/api/schedules/{schedule_id}")
+async def get_schedule_detail(schedule_id: str, db: Session = Depends(get_db)):
     """
-    return {
-        "success": False,
-        "message": "Feature en développement"
-    }
+    Récupérer un planning complet par son ID
+    """
+    try:
+        schedule_model = crud.get_schedule_by_id(db, schedule_id)
+
+        if not schedule_model:
+            raise HTTPException(status_code=404, detail="Planning non trouvé")
+
+        # Convertir en format Pydantic
+        schedule = crud.convert_db_schedule_to_schema(schedule_model)
+
+        # Générer la visualisation
+        visualizer = ScheduleVisualizer()
+        html_output = visualizer.render_html(schedule)
+
+        return {
+            "success": True,
+            "schedule": schedule.dict(),
+            "visual_html": html_output
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur: {str(e)}")
+
+
+@app.delete("/api/schedules/{schedule_id}")
+async def delete_schedule_endpoint(schedule_id: str, db: Session = Depends(get_db)):
+    """
+    Supprimer un planning
+    """
+    try:
+        deleted = crud.delete_schedule(db, schedule_id)
+
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Planning non trouvé")
+
+        return {
+            "success": True,
+            "message": f"Planning {schedule_id} supprimé"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur: {str(e)}")
+
+
+@app.post("/api/schedule/modify", response_model=ModificationResponse)
+async def modify_schedule(request: ModificationRequest):
+    """
+    Modifie un planning existant via langage naturel
+
+    Exemples de commandes:
+    - "Supprimer le cours de Prof_1 le lundi à 8h"
+    - "Déplacer le cours du mardi 10h au mercredi 14h"
+    - "Ajouter un cours de Prof_2 pour Classe A le jeudi de 9h à 10h30"
+    - "Changer la salle du cours de Prof_1 lundi 8h en Salle 5"
+    - "Supprimer tous les cours du vendredi"
+    """
+    try:
+        # Étape 1: Parser la demande avec l'agent
+        agent = AgentModifier(api_key=os.getenv("GROQ_API_KEY"))
+        action_data = agent.parse_modification_request(
+            user_message=request.user_message,
+            current_schedule=request.current_schedule.slots
+        )
+
+        # Vérifier si clarification nécessaire
+        if action_data.get("action") == "clarification_needed":
+            return ModificationResponse(
+                success=False,
+                message=action_data.get("message", "Clarification nécessaire"),
+                action_taken=action_data,
+                modified_schedule=None
+            )
+
+        # Vérifier si erreur
+        if action_data.get("action") == "error":
+            raise HTTPException(status_code=400, detail=action_data.get("message"))
+
+        # Étape 2: Appliquer la modification
+        modified_slots, confirmation_message = agent.apply_modification(
+            action_data=action_data,
+            current_schedule=request.current_schedule.slots
+        )
+
+        # Étape 3: Créer le nouveau planning
+        new_schedule_id = f"{request.current_schedule.schedule_id}_mod_{uuid.uuid4().hex[:4]}"
+        modified_schedule = Schedule(
+            schedule_id=new_schedule_id,
+            created_at=datetime.utcnow().isoformat(),
+            configuration=request.current_schedule.configuration,
+            slots=modified_slots
+        )
+
+        # Étape 4: Générer la visualisation HTML
+        visualizer = ScheduleVisualizer()
+        html_output = visualizer.render_html(modified_schedule)
+
+        return ModificationResponse(
+            success=True,
+            message=confirmation_message,
+            action_taken=action_data,
+            modified_schedule=modified_schedule,
+            visual_html=html_output
+        )
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erreur lors de la modification: {str(e)}"
+        )
 
 
 if __name__ == "__main__":

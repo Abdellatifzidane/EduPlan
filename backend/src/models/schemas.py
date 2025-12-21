@@ -1,5 +1,5 @@
-from pydantic import BaseModel, Field
-from typing import List, Optional, Dict
+from pydantic import BaseModel, Field, ConfigDict
+from typing import List, Optional, Dict, Any
 from datetime import time, date
 from enum import Enum
 
@@ -15,6 +15,8 @@ class DayOfWeek(str, Enum):
 
 
 class TimeSlot(BaseModel):
+    model_config = ConfigDict(json_encoders={time: lambda v: v.strftime("%H:%M:%S") if v else None})
+
     start: time
     end: time
 
@@ -27,6 +29,11 @@ class TeacherAvailability(BaseModel):
 
 class SystemConfiguration(BaseModel):
     """Configuration globale du système de planning"""
+    model_config = ConfigDict(json_encoders={
+        time: lambda v: v.strftime("%H:%M:%S") if v else None,
+        date: lambda v: v.isoformat() if v else None
+    })
+
     num_rooms: int = Field(default=8, description="Nombre de salles disponibles")
     num_teachers: int = Field(default=7, description="Nombre de professeurs")
     num_classes: int = Field(default=3, description="Nombre de classes")
@@ -114,6 +121,8 @@ class ScheduleRequest(BaseModel):
 
 class ScheduleSlot(BaseModel):
     """Un créneau dans le planning"""
+    model_config = ConfigDict(json_encoders={time: lambda v: v.strftime("%H:%M:%S") if v else None})
+
     day: DayOfWeek
     start_time: time
     end_time: time
@@ -155,4 +164,30 @@ class ScheduleResponse(BaseModel):
     success: bool
     message: str
     schedule: Optional[Schedule] = None
+    visual_html: Optional[str] = None
+
+
+class ModificationRequest(BaseModel):
+    """Requête pour modifier un planning via langage naturel"""
+    current_schedule: Schedule
+    user_message: str
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "current_schedule": {
+                    "schedule_id": "schedule_2024_01_15",
+                    "slots": []
+                },
+                "user_message": "Supprimer le cours de Prof_1 le lundi à 8h"
+            }
+        }
+
+
+class ModificationResponse(BaseModel):
+    """Réponse après modification du planning"""
+    success: bool
+    message: str
+    action_taken: Dict[str, Any]
+    modified_schedule: Optional[Schedule] = None
     visual_html: Optional[str] = None

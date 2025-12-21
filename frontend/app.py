@@ -15,18 +15,48 @@ st.set_page_config(
 API_URL = "http://localhost:8000"  # http://edupplan-backend-service:8000 pour Kubernetes
 
 
+def custom_json_encoder(obj):
+    """Encodeur JSON personnalisé pour gérer les objets time"""
+    if isinstance(obj, time):
+        return obj.strftime("%H:%M:%S")
+    raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
+
+
+def load_latest_schedule():
+    """Charger le dernier planning depuis la base de données"""
+    if 'current_schedule' not in st.session_state:
+        try:
+            response = requests.get(f"{API_URL}/api/schedules/latest", timeout=10)
+
+            if response.status_code == 200:
+                result = response.json()
+
+                if result.get('success') and result.get('schedule'):
+                    st.session_state['current_schedule'] = result['schedule']
+                    st.info(f"📊 Planning chargé: {result['schedule']['schedule_id']}")
+                    return True
+        except Exception:
+            pass
+    return False
+
+
 def main():
+    # Charger automatiquement le dernier planning au démarrage
+    load_latest_schedule()
+
     st.title("📅 EduPlan - Générateur de Planning Intelligent")
     st.markdown("---")
 
     # Sidebar pour la navigation
     page = st.sidebar.radio(
         "Navigation",
-        ["Générer un Planning", "Parser une Contrainte", "Historique"]
+        ["Générer un Planning", "Modifier le Planning", "Parser une Contrainte", "Historique"]
     )
 
     if page == "Générer un Planning":
         generate_schedule_page()
+    elif page == "Modifier le Planning":
+        modify_schedule_page()
     elif page == "Parser une Contrainte":
         parse_constraint_page()
     else:
@@ -267,6 +297,9 @@ def generate_schedule_page():
 
                     st.success(f"✅ {result['message']}")
 
+                    # Stocker le planning dans la session
+                    st.session_state['current_schedule'] = result['schedule']
+
                     # Afficher le planning
                     if result.get("visual_html"):
                         st.components.v1.html(result["visual_html"], height=800, scrolling=True)
@@ -274,10 +307,12 @@ def generate_schedule_page():
                     # Téléchargement
                     st.download_button(
                         label="📥 Télécharger le planning (JSON)",
-                        data=json.dumps(result["schedule"], indent=2),
+                        data=json.dumps(result["schedule"], indent=2, default=custom_json_encoder),
                         file_name=f"{result['schedule']['schedule_id']}.json",
                         mime="application/json"
                     )
+
+                    st.info("💡 Vous pouvez maintenant modifier ce planning via l'onglet 'Modifier le Planning'")
                 else:
                     st.error(f"❌ Erreur: {response.json().get('detail', 'Erreur inconnue')}")
 
@@ -328,9 +363,200 @@ def parse_constraint_page():
             st.warning("⚠️ Veuillez entrer une contrainte")
 
 
+def modify_schedule_page():
+    st.header("🤖 Modifier le Planning - Agent IA")
+
+    st.markdown("""
+    Utilisez l'agent IA pour modifier votre planning en **langage naturel** !
+
+    **Exemples de commandes :**
+    - "Supprimer le cours de Prof_1 le lundi à 8h"
+    - "Déplacer le cours du mardi 10h au mercredi 14h"
+    - "Ajouter un cours de Prof_2 pour Classe A le jeudi de 9h à 10h30"
+    - "Changer la salle du cours de Prof_1 lundi 8h en Salle 5"
+    - "Supprimer tous les cours du vendredi"
+    """)
+
+    # Vérifier qu'un planning existe
+    if 'current_schedule' not in st.session_state or not st.session_state['current_schedule']:
+        st.warning("⚠️ Aucun planning n'a encore été généré. Veuillez d'abord générer un planning.")
+        return
+
+    current_schedule = st.session_state['current_schedule']
+
+    st.success(f"📅 Planning actif: **{current_schedule['schedule_id']}** ({len(current_schedule['slots'])} créneaux)")
+
+    # Zone de chat
+    st.markdown("---")
+    st.subheader("💬 Chat avec l'Agent Modificateur")
+
+    # Historique de conversation
+    if 'conversation_history' not in st.session_state:
+        st.session_state['conversation_history'] = []
+
+    # Afficher l'historique
+    for msg in st.session_state['conversation_history']:
+        if msg['role'] == 'user':
+            st.chat_message("user").write(msg['content'])
+        else:
+            st.chat_message("assistant").write(msg['content'])
+
+    # Input utilisateur
+    user_input = st.chat_input("Tapez votre demande de modification...")
+
+    if user_input:
+        # Ajouter le message utilisateur
+        st.session_state['conversation_history'].append({
+            'role': 'user',
+            'content': user_input
+        })
+
+        st.chat_message("user").write(user_input)
+
+        # Appeler l'API
+        with st.spinner("L'agent analyse votre demande..."):
+            try:
+                # Convertir le schedule en JSON puis le recharger pour éviter les problèmes de sérialisation
+                schedule_json = json.dumps(current_schedule, default=custom_json_encoder)
+                schedule_data = json.loads(schedule_json)
+
+                response = requests.post(
+                    f"{API_URL}/api/schedule/modify",
+                    json={
+                        "current_schedule": schedule_data,
+                        "user_message": user_input
+                    },
+                    timeout=60
+                )
+
+                if response.status_code == 200:
+                    result = response.json()
+
+                    if result['success']:
+                        # Mise à jour du planning
+                        st.session_state['current_schedule'] = result['modified_schedule']
+
+                        # Message de confirmation
+                        confirmation_msg = f"{result['message']}\n\n**Action effectuée:** {result['action_taken']['action']}"
+                        st.session_state['conversation_history'].append({
+                            'role': 'assistant',
+                            'content': confirmation_msg
+                        })
+
+                        st.chat_message("assistant").write(confirmation_msg)
+
+                        # Afficher le nouveau planning
+                        if result.get("visual_html"):
+                            st.markdown("### 📊 Planning Mis à Jour")
+                            st.components.v1.html(result["visual_html"], height=600, scrolling=True)
+
+                        # Télécharger
+                        st.download_button(
+                            label="📥 Télécharger le planning modifié",
+                            data=json.dumps(result["modified_schedule"], indent=2, default=custom_json_encoder),
+                            file_name=f"{result['modified_schedule']['schedule_id']}.json",
+                            mime="application/json"
+                        )
+
+                    else:
+                        # Clarification nécessaire
+                        clarification_msg = result['message']
+                        st.session_state['conversation_history'].append({
+                            'role': 'assistant',
+                            'content': clarification_msg
+                        })
+                        st.chat_message("assistant").write(clarification_msg)
+
+                else:
+                    error_detail = response.json().get('detail', 'Erreur inconnue')
+                    st.error(f"❌ Erreur: {error_detail}")
+
+            except requests.exceptions.ConnectionError:
+                st.error("❌ Impossible de se connecter à l'API")
+            except Exception as e:
+                st.error(f"❌ Erreur: {str(e)}")
+
+
 def history_page():
-    st.header("📚 Historique des Plannings")
-    st.info("Fonctionnalité en développement - Affichera l'historique depuis la base de données")
+    st.header("📚 Historique des Plannings Sauvegardés")
+
+    # Récupérer la liste des plannings
+    try:
+        response = requests.get(f"{API_URL}/api/schedules", timeout=10)
+
+        if response.status_code == 200:
+            data = response.json()
+            schedules = data.get("schedules", [])
+
+            if not schedules:
+                st.info("Aucun planning enregistré pour le moment. Générez-en un pour le voir apparaître ici !")
+                return
+
+            st.success(f"📊 {data['count']} planning(s) trouvé(s)")
+
+            # Afficher sous forme de tableau
+            for schedule in schedules:
+                with st.expander(f"📅 {schedule['schedule_id']} - Créé le {schedule['created_at'][:19]}"):
+                    col1, col2, col3 = st.columns([2, 2, 1])
+
+                    with col1:
+                        st.write(f"**Créneaux:** {schedule['num_slots']}")
+                        st.write(f"**Salles:** {schedule['configuration']['num_rooms']}")
+
+                    with col2:
+                        st.write(f"**Professeurs:** {schedule['configuration']['num_teachers']}")
+                        st.write(f"**Classes:** {schedule['configuration']['num_classes']}")
+
+                    with col3:
+                        if st.button("👁️ Voir", key=f"view_{schedule['schedule_id']}"):
+                            # Charger le planning complet
+                            detail_response = requests.get(
+                                f"{API_URL}/api/schedules/{schedule['schedule_id']}",
+                                timeout=10
+                            )
+
+                            if detail_response.status_code == 200:
+                                detail_data = detail_response.json()
+
+                                # Stocker dans la session
+                                st.session_state['current_schedule'] = detail_data['schedule']
+
+                                # Afficher
+                                st.success(f"✅ Planning {schedule['schedule_id']} chargé!")
+
+                                if detail_data.get("visual_html"):
+                                    st.components.v1.html(detail_data["visual_html"], height=800, scrolling=True)
+
+                                # Télécharger
+                                st.download_button(
+                                    label="📥 Télécharger (JSON)",
+                                    data=json.dumps(detail_data["schedule"], indent=2, default=custom_json_encoder),
+                                    file_name=f"{schedule['schedule_id']}.json",
+                                    mime="application/json",
+                                    key=f"dl_{schedule['schedule_id']}"
+                                )
+
+                        if st.button("🗑️ Supprimer", key=f"del_{schedule['schedule_id']}"):
+                            # Confirmer la suppression
+                            if st.button("⚠️ Confirmer suppression", key=f"conf_{schedule['schedule_id']}"):
+                                delete_response = requests.delete(
+                                    f"{API_URL}/api/schedules/{schedule['schedule_id']}",
+                                    timeout=10
+                                )
+
+                                if delete_response.status_code == 200:
+                                    st.success("✅ Planning supprimé!")
+                                    st.rerun()
+                                else:
+                                    st.error("❌ Erreur lors de la suppression")
+
+        else:
+            st.error(f"❌ Erreur: {response.status_code}")
+
+    except requests.exceptions.ConnectionError:
+        st.error("❌ Impossible de se connecter à l'API")
+    except Exception as e:
+        st.error(f"❌ Erreur: {str(e)}")
 
 
 if __name__ == "__main__":
