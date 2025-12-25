@@ -1,25 +1,250 @@
 import streamlit as st
 import requests
 import pandas as pd
-from datetime import time
+from datetime import time, datetime
 import json
-
-# Configuration de la page
-st.set_page_config(
-    page_title="EduPlan - Générateur de Planning",
-    page_icon="📅",
-    layout="wide"
-)
-
-# URL de l'API
-API_URL = "http://localhost:8000"  # http://edupplan-backend-service:8000 pour Kubernetes
+import plotly.graph_objects as go
+from typing import Dict, List, Any
 
 
 def custom_json_encoder(obj):
-    """Encodeur JSON personnalisé pour gérer les objets time"""
-    if isinstance(obj, time):
-        return obj.strftime("%H:%M:%S")
+    """Encodeur JSON personnalisé pour gérer les objets time et datetime"""
+    if isinstance(obj, (time, datetime)):
+        return obj.strftime("%H:%M:%S") if isinstance(obj, time) else obj.isoformat()
     raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
+
+# Configuration de la page
+st.set_page_config(
+    page_title="EduPlan - Générateur de Planning Intelligent",
+    page_icon="📅",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
+
+# URL de l'API
+API_URL = "http://localhost:8000"
+
+# CSS personnalisé pour une interface moderne en 3 colonnes
+def inject_custom_css():
+    st.markdown("""
+    <style>
+    /* Hide Streamlit branding */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+
+    /* Global styling */
+    .main {
+        padding: 0 !important;
+        background: #ffffff;
+    }
+
+    .block-container {
+        padding: 1rem !important;
+        max-width: 100% !important;
+        background: #f8f9fa;
+    }
+
+    /* Colonnes principales */
+    .column-container {
+        display: flex;
+        height: 95vh;
+        gap: 1rem;
+    }
+
+    .left-column {
+        background: white;
+        border-radius: 15px;
+        padding: 1.5rem;
+        overflow-y: auto;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+    }
+
+    .middle-column {
+        background: white;
+        border-radius: 15px;
+        padding: 2rem;
+        overflow-y: auto;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+    }
+
+    .right-column {
+        background: white;
+        border-radius: 15px;
+        padding: 1.5rem;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+    }
+
+    /* Headers */
+    h1, h2, h3 {
+        color: #2C3E50;
+        font-weight: 600;
+    }
+
+    h1 {
+        font-size: 1.8rem;
+        margin-bottom: 1rem;
+        color: #2C3E50;
+    }
+
+    h2 {
+        font-size: 1.3rem;
+        margin-top: 0.5rem;
+        margin-bottom: 1rem;
+    }
+
+    h3 {
+        font-size: 1.1rem;
+        margin-top: 1rem;
+        color: #34495e;
+    }
+
+    /* Boutons */
+    .stButton > button {
+        background: #667eea;
+        color: white;
+        border: none;
+        padding: 0.6rem 1.5rem;
+        border-radius: 10px;
+        font-weight: 500;
+        transition: all 0.3s;
+        width: 100%;
+    }
+
+    .stButton > button:hover {
+        background: #5568d3;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+    }
+
+    /* Input fields */
+    .stTextInput > div > div > input,
+    .stNumberInput > div > div > input,
+    .stSelectbox > div > div > div,
+    .stTimeInput > div > div > input {
+        border-radius: 8px;
+        border: 2px solid #e0e0e0;
+        padding: 0.5rem;
+        transition: all 0.2s;
+    }
+
+    .stTextInput > div > div > input:focus,
+    .stNumberInput > div > div > input:focus {
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+
+    /* Expanders */
+    .streamlit-expanderHeader {
+        background: #f8f9fa;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        font-weight: 500;
+        padding: 0.8rem;
+    }
+
+    /* Chat messages */
+    .chat-container {
+        flex: 1;
+        overflow-y: auto;
+        margin-bottom: 1rem;
+        padding-right: 0.5rem;
+    }
+
+    .chat-message {
+        padding: 1rem;
+        border-radius: 12px;
+        margin-bottom: 1rem;
+        animation: fadeIn 0.3s;
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .user-message {
+        background: #667eea;
+        color: white;
+        margin-left: 15%;
+        box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+    }
+
+    .assistant-message {
+        background: #f8f9fa;
+        border: 1px solid #e0e0e0;
+        margin-right: 15%;
+        color: #2C3E50;
+    }
+
+    /* Chat input */
+    .chat-input-container {
+        border-top: 2px solid #e0e0e0;
+        padding-top: 1rem;
+    }
+
+    /* Metrics */
+    .metric-card {
+        background: #667eea;
+        color: white;
+        padding: 1rem;
+        border-radius: 10px;
+        text-align: center;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .metric-value {
+        font-size: 2rem;
+        font-weight: 700;
+    }
+
+    .metric-label {
+        font-size: 0.9rem;
+        opacity: 0.9;
+        margin-top: 0.3rem;
+    }
+
+    /* Scrollbar custom */
+    ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 10px;
+    }
+
+    ::-webkit-scrollbar-thumb {
+        background: #667eea;
+        border-radius: 10px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+        background: #5568d3;
+    }
+
+    /* Planning container */
+    .planning-view {
+        background: white;
+        border-radius: 12px;
+        padding: 1rem;
+        margin-top: 1rem;
+    }
+
+    /* Success/Error alerts */
+    .stSuccess, .stError, .stInfo, .stWarning {
+        border-radius: 10px;
+        padding: 1rem;
+        margin: 0.5rem 0;
+    }
+
+    /* Hide unnecessary elements */
+    .stDeployButton {display: none;}
+    .stDecoration {display: none;}
+    </style>
+    """, unsafe_allow_html=True)
 
 
 def load_latest_schedule():
@@ -27,536 +252,474 @@ def load_latest_schedule():
     if 'current_schedule' not in st.session_state:
         try:
             response = requests.get(f"{API_URL}/api/schedules/latest", timeout=10)
-
             if response.status_code == 200:
                 result = response.json()
-
                 if result.get('success') and result.get('schedule'):
                     st.session_state['current_schedule'] = result['schedule']
-                    st.info(f"📊 Planning chargé: {result['schedule']['schedule_id']}")
+                    st.session_state['visual_html'] = result.get('visual_html', '')
                     return True
-        except Exception:
+        except Exception as e:
             pass
     return False
 
 
-def main():
-    # Charger automatiquement le dernier planning au démarrage
-    load_latest_schedule()
+def configuration_panel():
+    """Panneau de configuration à gauche"""
+    st.markdown("## ⚙️ Configuration")
 
-    st.title("📅 EduPlan - Générateur de Planning Intelligent")
-    st.markdown("---")
+    with st.expander("📊 **Ressources**", expanded=True):
+        num_rooms = st.number_input("Nombre de salles", min_value=1, max_value=20, value=8, key="rooms")
+        num_teachers = st.number_input("Nombre de professeurs", min_value=1, max_value=30, value=7, key="teachers")
+        num_classes = st.number_input("Nombre de classes", min_value=1, max_value=20, value=3, key="classes")
 
-    # Sidebar pour la navigation
-    page = st.sidebar.radio(
-        "Navigation",
-        ["Générer un Planning", "Modifier le Planning", "Parser une Contrainte", "Historique"]
-    )
+    with st.expander("⏰ **Horaires**", expanded=False):
+        day_start = st.time_input("Début de journée", value=time(8, 0), key="start")
+        day_end = st.time_input("Fin de journée", value=time(19, 0), key="end")
+        session_duration = st.slider("Durée d'une séance (min)", 45, 120, 90, 15)
+        break_duration = st.slider("Durée des pauses (min)", 5, 30, 15, 5)
 
-    if page == "Générer un Planning":
-        generate_schedule_page()
-    elif page == "Modifier le Planning":
-        modify_schedule_page()
-    elif page == "Parser une Contrainte":
-        parse_constraint_page()
-    else:
-        history_page()
+    with st.expander("🍽️ **Pause déjeuner**", expanded=False):
+        lunch_start = st.time_input("Début pause déj", value=time(13, 0), key="lunch_s")
+        lunch_end = st.time_input("Fin pause déj", value=time(14, 0), key="lunch_e")
 
+    with st.expander("📋 **Contraintes**", expanded=False):
+        days_in_person = st.number_input("Jours en présentiel", 1, 5, 4)
+        days_remote = st.number_input("Jours en distanciel", 0, 2, 1)
+        max_hours_per_day = st.slider("Max heures/jour/prof", 4, 10, 9)
+        max_consecutive = st.slider("Max séances consécutives", 1, 5, 3)
+        prevent_parallel = st.checkbox("Éviter profs en parallèle", True)
 
-def generate_schedule_page():
-    st.header("🎯 Générer un Nouveau Planning")
-
-    # Section 1: Configuration Système
-    st.subheader("1. Configuration du Système")
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        num_rooms = st.number_input("Nombre de salles", min_value=1, value=8)
-        num_teachers = st.number_input("Nombre de professeurs", min_value=1, value=7)
-        num_classes = st.number_input("Nombre de classes", min_value=1, value=3)
-
-    with col2:
-        day_start = st.time_input("Début de journée", value=time(8, 0))
-        day_end = st.time_input("Fin de journée", value=time(19, 0))
-        session_duration = st.number_input("Durée séance (min)", min_value=30, value=90)
-
-    with col3:
-        break_duration = st.number_input("Pause entre cours (min)", min_value=5, value=15)
-        lunch_start = st.time_input("Début pause déj", value=time(13, 0))
-        lunch_end = st.time_input("Fin pause déj", value=time(14, 0))
-
-    col4, col5 = st.columns(2)
-    with col4:
-        days_in_person = st.number_input("Jours en présentiel", min_value=1, max_value=7, value=4)
-        days_remote = st.number_input("Jours en distanciel", min_value=0, max_value=7, value=1)
-
-    with col5:
-        max_hours_per_day = st.number_input("Max heures/jour/prof", min_value=1, value=9)
-        max_consecutive = st.number_input(
-            "Max séances consécutives (prof, classe)",
-            min_value=1,
-            max_value=10,
-            value=3,
-            help="Maximum de séances consécutives qu'un prof peut donner à la même classe"
-        )
-        prevent_parallel = st.checkbox(
-            "Interdire même prof sur 2 classes simultanément",
-            value=True
-        )
-
-    # Section 2: Charges de travail des profs
-    st.subheader("2. Charges de Travail des Professeurs")
-
-    num_profs_to_configure = st.number_input(
-        "Nombre de profs à configurer",
-        min_value=1,
-        max_value=num_teachers,
-        value=min(3, num_teachers)
-    )
+    # Configuration des professeurs
+    st.markdown("### 👨‍🏫 Professeurs")
+    num_profs = st.number_input("Nombre à configurer", 1, num_teachers, min(3, num_teachers), key="num_p")
 
     teacher_workloads = []
-    for i in range(num_profs_to_configure):
-        with st.expander(f"Professeur {i+1}"):
-            teacher_name = st.text_input(f"Nom", key=f"teacher_name_{i}", value=f"Prof_{i+1}")
-            total_hours = st.number_input(
-                f"Total heures/semaine",
-                min_value=1.0,
-                max_value=40.0,
-                value=9.0,
-                key=f"total_hours_{i}"
-            )
+    for i in range(num_profs):
+        with st.expander(f"Prof {i+1}", expanded=(i==0)):
+            name = st.text_input("Nom", value=f"Prof_{i+1}", key=f"p_name_{i}")
+            hours = st.number_input("Heures/semaine", 1.0, 40.0, 9.0, 0.5, key=f"p_hours_{i}")
 
-            st.write("Répartition par classe:")
-            class_assignments = {}
+            st.markdown("**Classes assignées:**")
+            assignments = {}
+            num_cls = st.number_input("Nb classes", 1, num_classes, min(2, num_classes), key=f"p_nc_{i}")
 
-            num_classes_assigned = st.number_input(
-                "Nombre de classes assignées",
-                min_value=1,
-                max_value=num_classes,
-                value=min(2, num_classes),
-                key=f"num_classes_{i}"
-            )
-
-            for j in range(num_classes_assigned):
-                col_a, col_b = st.columns(2)
-                with col_a:
-                    class_name = st.text_input(
-                        f"Classe {j+1}",
-                        value=f"Classe {chr(65+j)}",
-                        key=f"class_name_{i}_{j}"
-                    )
-                with col_b:
-                    hours = st.number_input(
-                        f"Heures",
-                        min_value=0.5,
-                        max_value=total_hours,
-                        value=total_hours / num_classes_assigned,
-                        step=0.5,
-                        key=f"class_hours_{i}_{j}"
-                    )
-                class_assignments[class_name] = hours
+            for j in range(num_cls):
+                col1, col2 = st.columns([2, 1])
+                with col1:
+                    class_name = st.text_input("", f"Classe {chr(65+j)}", key=f"p_c_{i}_{j}", label_visibility="collapsed")
+                with col2:
+                    class_hours = st.number_input("H", 0.5, hours, hours/num_cls, 0.5, key=f"p_ch_{i}_{j}", label_visibility="collapsed")
+                assignments[class_name] = class_hours
 
             teacher_workloads.append({
-                "teacher_name": teacher_name,
-                "total_hours_per_week": total_hours,
-                "class_assignments": class_assignments
+                "teacher_name": name,
+                "total_hours_per_week": hours,
+                "class_assignments": assignments
             })
 
-    # Section 3: Contraintes de Disponibilité (Interface Visuelle)
-    st.subheader("3. Disponibilités des Professeurs")
+    # Disponibilités
+    st.markdown("### 📅 Disponibilités")
+    num_avail = st.number_input("Profs avec contraintes", 0, len(teacher_workloads), min(2, len(teacher_workloads)), key="num_av")
 
-    # Générer les créneaux horaires basés sur la configuration
-    def generate_time_slots_for_ui(day_start, day_end, session_duration, break_duration, lunch_start, lunch_end):
-        from datetime import datetime, timedelta
-        slots = []
-        current = datetime.combine(datetime.today(), day_start)
-        end = datetime.combine(datetime.today(), day_end)
-        lunch_s = datetime.combine(datetime.today(), lunch_start)
-        lunch_e = datetime.combine(datetime.today(), lunch_end)
-
-        while current < end:
-            slot_end = current + timedelta(minutes=session_duration)
-
-            # Éviter la pause déjeuner
-            if current < lunch_e and slot_end > lunch_s:
-                current = lunch_e
-                continue
-
-            if slot_end <= end:
-                slots.append((current.time().strftime("%H:%M"), slot_end.time().strftime("%H:%M")))
-
-            current = slot_end + timedelta(minutes=break_duration)
-
-        return slots
-
-    time_slots_for_ui = generate_time_slots_for_ui(
-        day_start, day_end, session_duration, break_duration, lunch_start, lunch_end
-    )
-
-    # Liste des jours
     days = ["lundi", "mardi", "mercredi", "jeudi", "vendredi"]
+    time_slots = [
+        ("08:00", "09:30"), ("09:45", "11:15"), ("11:30", "13:00"),
+        ("14:00", "15:30"), ("15:45", "17:15"), ("17:30", "19:00")
+    ]
 
-    # Sélectionner les profs pour lesquels définir les disponibilités
-    num_profs_availabilities = st.number_input(
-        "Nombre de profs avec contraintes de disponibilité",
-        min_value=0,
-        max_value=num_teachers,
-        value=min(3, num_teachers)
-    )
+    availabilities = []
+    for i in range(num_avail):
+        if i < len(teacher_workloads):
+            teacher_name = teacher_workloads[i]['teacher_name']
+        else:
+            teacher_name = f"Prof_{i+1}"
 
-    structured_availabilities = []
+        with st.expander(f"📅 {teacher_name}", expanded=(i==0)):
+            teacher_availabilities = []
 
-    for i in range(num_profs_availabilities):
-        with st.expander(f"📅 Disponibilités - {teacher_workloads[i]['teacher_name'] if i < len(teacher_workloads) else f'Prof_{i+1}'}"):
-            teacher_name = teacher_workloads[i]['teacher_name'] if i < len(teacher_workloads) else f"Prof_{i+1}"
+            for day in days:
+                selected_slots = st.multiselect(
+                    f"{day.capitalize()}",
+                    options=[f"{s[0]}-{s[1]}" for s in time_slots],
+                    default=[f"{s[0]}-{s[1]}" for s in time_slots[:4]],
+                    key=f"av_{i}_{day}"
+                )
 
-            st.markdown(f"**Cochez les créneaux disponibles pour {teacher_name}**")
+                if selected_slots:
+                    slots_list = []
+                    for slot_str in selected_slots:
+                        start, end = slot_str.split("-")
+                        slots_list.append({"start": start, "end": end})
 
-            # Créer une grille interactive
-            teacher_availabilities = {}
-
-            # Header avec les jours
-            cols = st.columns([2] + [1] * len(days))
-            cols[0].write("**Créneau**")
-            for idx, day in enumerate(days):
-                cols[idx + 1].write(f"**{day.capitalize()}**")
-
-            # Créer une ligne par créneau horaire
-            for slot_idx, (start, end) in enumerate(time_slots_for_ui):
-                cols = st.columns([2] + [1] * len(days))
-                cols[0].write(f"{start} - {end}")
-
-                for day_idx, day in enumerate(days):
-                    checkbox_key = f"avail_{i}_{day}_{slot_idx}"
-                    is_checked = cols[day_idx + 1].checkbox(
-                        f"Disponible {day} {start}-{end}",
-                        key=checkbox_key,
-                        label_visibility="collapsed"
-                    )
-
-                    if is_checked:
-                        if day not in teacher_availabilities:
-                            teacher_availabilities[day] = []
-                        teacher_availabilities[day].append((start, end))
-
-            # Convertir en format API
-            availabilities_list = []
-            for day, slots in teacher_availabilities.items():
-                if slots:
-                    # Fusionner les créneaux consécutifs
-                    time_slots = [{"start": slot[0], "end": slot[1]} for slot in slots]
-                    availabilities_list.append({
+                    teacher_availabilities.append({
                         "teacher_name": teacher_name,
                         "day": day,
-                        "time_slots": time_slots
+                        "time_slots": slots_list
                     })
 
-            if availabilities_list:
-                structured_availabilities.append({
+            if teacher_availabilities:
+                availabilities.append({
                     "teacher_name": teacher_name,
-                    "availabilities": availabilities_list
+                    "availabilities": teacher_availabilities
                 })
 
     # Bouton de génération
     st.markdown("---")
-    if st.button("🚀 Générer le Planning", type="primary", use_container_width=True):
-        with st.spinner("Génération du planning en cours..."):
-            try:
-                # Préparer la requête
-                request_data = {
-                    "configuration": {
-                        "num_rooms": num_rooms,
-                        "num_teachers": num_teachers,
-                        "num_classes": num_classes,
-                        "day_start": day_start.strftime("%H:%M:%S"),
-                        "day_end": day_end.strftime("%H:%M:%S"),
-                        "session_duration": session_duration,
-                        "break_duration": break_duration,
-                        "lunch_break_start": lunch_start.strftime("%H:%M:%S"),
-                        "lunch_break_end": lunch_end.strftime("%H:%M:%S"),
-                        "days_in_person": days_in_person,
-                        "days_remote": days_remote,
-                        "max_hours_per_day_per_teacher": max_hours_per_day,
-                        "prevent_same_teacher_parallel": prevent_parallel,
-                        "max_consecutive_sessions": max_consecutive
-                    },
-                    "teacher_workloads": teacher_workloads,
-                    "structured_availabilities": structured_availabilities
-                }
+    if st.button("🚀 Générer Planning", type="primary", use_container_width=True, key="gen_btn"):
+        config_data = {
+            'num_rooms': num_rooms,
+            'num_teachers': num_teachers,
+            'num_classes': num_classes,
+            'day_start': day_start.strftime("%H:%M:%S"),
+            'day_end': day_end.strftime("%H:%M:%S"),
+            'lunch_start': lunch_start.strftime("%H:%M:%S"),
+            'lunch_end': lunch_end.strftime("%H:%M:%S"),
+            'session_duration': session_duration,
+            'break_duration': break_duration,
+            'days_in_person': days_in_person,
+            'days_remote': days_remote,
+            'max_hours_per_day': max_hours_per_day,
+            'max_consecutive': max_consecutive,
+            'prevent_parallel': prevent_parallel
+        }
 
-                # Appeler l'API
-                response = requests.post(
-                    f"{API_URL}/api/schedule/generate",
-                    json=request_data,
-                    timeout=60
-                )
+        return {
+            "action": "generate",
+            "configuration": config_data,
+            "teacher_workloads": teacher_workloads,
+            "structured_availabilities": availabilities
+        }
 
-                if response.status_code == 200:
-                    result = response.json()
-
-                    st.success(f"✅ {result['message']}")
-
-                    # Stocker le planning dans la session
-                    st.session_state['current_schedule'] = result['schedule']
-
-                    # Afficher le planning
-                    if result.get("visual_html"):
-                        st.components.v1.html(result["visual_html"], height=800, scrolling=True)
-
-                    # Téléchargement
-                    st.download_button(
-                        label="📥 Télécharger le planning (JSON)",
-                        data=json.dumps(result["schedule"], indent=2, default=custom_json_encoder),
-                        file_name=f"{result['schedule']['schedule_id']}.json",
-                        mime="application/json"
-                    )
-
-                    st.info("💡 Vous pouvez maintenant modifier ce planning via l'onglet 'Modifier le Planning'")
-                else:
-                    st.error(f"❌ Erreur: {response.json().get('detail', 'Erreur inconnue')}")
-
-            except requests.exceptions.ConnectionError:
-                st.error("❌ Impossible de se connecter à l'API. Assurez-vous que le serveur est lancé.")
-            except Exception as e:
-                st.error(f"❌ Erreur: {str(e)}")
+    return None
 
 
-def parse_constraint_page():
-    st.header("🧠 Parser une Contrainte en Langage Naturel")
+def planning_view():
+    """Vue principale du planning au centre"""
+    st.markdown("# 📅 Planning de la Semaine")
 
-    st.info("Testez l'agent NLP pour voir comment il interprète vos contraintes")
+    # Charger automatiquement le dernier planning
+    load_latest_schedule()
 
-    teacher_name = st.text_input("Nom du professeur", value="Lyes")
-    constraint_text = st.text_area(
-        "Contrainte en langage naturel",
-        placeholder="Ex: Je serai disponible lundi, mardi, vendredi matin de 08:00 - 13:00",
-        height=150
+    # Actions rapides
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        if st.button("🔄 Actualiser", use_container_width=True):
+            st.rerun()
+    with col2:
+        if st.button("✅ Valider", use_container_width=True):
+            save_validated_schedule()
+    with col3:
+        if st.button("🗑️ Effacer", use_container_width=True):
+            delete_current_schedule()
+
+    # Vérifier si un planning existe
+    if 'current_schedule' in st.session_state and st.session_state['current_schedule']:
+        schedule = st.session_state['current_schedule']
+
+        # Métriques épurées (sans schedule_id)
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.markdown('<div class="metric-card"><div class="metric-value">{}</div><div class="metric-label">Créneaux</div></div>'.format(len(schedule['slots'])), unsafe_allow_html=True)
+        with col2:
+            st.markdown('<div class="metric-card"><div class="metric-value">{}</div><div class="metric-label">Professeurs</div></div>'.format(schedule['configuration']['num_teachers']), unsafe_allow_html=True)
+        with col3:
+            st.markdown('<div class="metric-card"><div class="metric-value">{}</div><div class="metric-label">Classes</div></div>'.format(schedule['configuration']['num_classes']), unsafe_allow_html=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # Afficher le planning HTML
+        if 'visual_html' in st.session_state:
+            st.components.v1.html(st.session_state['visual_html'], height=650, scrolling=True)
+
+        # Bouton de téléchargement discret
+        st.download_button(
+            "📥 Télécharger le planning (JSON)",
+            data=json.dumps(schedule, indent=2, default=custom_json_encoder),
+            file_name=f"planning_{datetime.now().strftime('%Y%m%d_%H%M')}.json",
+            mime="application/json",
+            use_container_width=True
+        )
+    else:
+        # Planning vide
+        st.info("📌 **Aucun planning généré**\n\nUtilisez le panneau de configuration à gauche pour créer votre premier planning.")
+
+        # Grille vide
+        fig = create_empty_planning_view()
+        st.plotly_chart(fig, use_container_width=True)
+
+
+def create_empty_planning_view():
+    """Créer une vue de planning vide"""
+    fig = go.Figure()
+
+    days = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi"]
+    hours = ["08:00", "09:30", "11:00", "12:30", "14:00", "15:30", "17:00"]
+
+    for i, day in enumerate(days):
+        for j, hour in enumerate(hours[:-1]):
+            fig.add_shape(
+                type="rect",
+                x0=i, x1=i+1,
+                y0=j, y1=j+1,
+                line=dict(color="#E0E0E0", width=1),
+                fillcolor="white"
+            )
+
+    fig.update_layout(
+        xaxis=dict(
+            tickmode='array',
+            tickvals=list(range(len(days))),
+            ticktext=days,
+            side='top',
+            showgrid=False
+        ),
+        yaxis=dict(
+            tickmode='array',
+            tickvals=list(range(len(hours))),
+            ticktext=hours,
+            autorange='reversed',
+            showgrid=False
+        ),
+        height=500,
+        showlegend=False,
+        plot_bgcolor='#F8F9FA',
+        paper_bgcolor='white',
+        margin=dict(l=60, r=20, t=60, b=20)
     )
 
-    if st.button("🔍 Analyser", type="primary"):
-        if constraint_text.strip():
-            with st.spinner("Analyse en cours..."):
+    return fig
+
+
+def chat_panel():
+    """Panneau de chat avec l'agent à droite - TOUJOURS VISIBLE"""
+    st.markdown("## 💬 Assistant IA")
+    st.markdown("*Modifiez votre planning en langage naturel*")
+
+    # Initialiser l'historique
+    if 'chat_history' not in st.session_state:
+        st.session_state['chat_history'] = []
+
+    # Container pour le chat
+    chat_container = st.container()
+
+    with chat_container:
+        st.markdown('<div class="chat-container">', unsafe_allow_html=True)
+
+        # Message de bienvenue si vide
+        if len(st.session_state['chat_history']) == 0:
+            st.markdown('''
+            <div class="chat-message assistant-message">
+                👋 Bonjour ! Je suis votre assistant IA pour modifier le planning.
+                <br><br>
+                <b>Exemples de commandes :</b><br>
+                • "Supprimer le cours de Prof_1 lundi à 8h"<br>
+                • "Ajouter un cours pour Prof_2 mardi de 10h à 11h30"<br>
+                • "Déplacer le cours du mercredi 9h au jeudi 14h"
+            </div>
+            ''', unsafe_allow_html=True)
+
+        # Afficher l'historique des messages
+        for msg in st.session_state['chat_history']:
+            if msg['role'] == 'user':
+                st.markdown(
+                    f'<div class="chat-message user-message">👤 {msg["content"]}</div>',
+                    unsafe_allow_html=True
+                )
+            else:
+                st.markdown(
+                    f'<div class="chat-message assistant-message">🤖 {msg["content"]}</div>',
+                    unsafe_allow_html=True
+                )
+
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    # Zone d'input en bas
+    st.markdown('<div class="chat-input-container">', unsafe_allow_html=True)
+
+    # Vérifier qu'un planning existe
+    if 'current_schedule' not in st.session_state or not st.session_state['current_schedule']:
+        st.warning("⚠️ Générez d'abord un planning pour pouvoir le modifier")
+        st.markdown('</div>', unsafe_allow_html=True)
+        return
+
+    # Input pour nouveau message
+    user_input = st.text_input(
+        "Votre demande",
+        placeholder="Ex: Supprimer le cours de Prof_1 lundi 8h",
+        key="chat_input",
+        label_visibility="collapsed"
+    )
+
+    if st.button("📤 Envoyer", type="primary", use_container_width=True, key="send_btn"):
+        if user_input and user_input.strip():
+            # Ajouter le message utilisateur
+            st.session_state['chat_history'].append({
+                'role': 'user',
+                'content': user_input
+            })
+
+            # Appeler l'API
+            with st.spinner("L'agent analyse votre demande..."):
                 try:
+                    schedule_json = json.dumps(st.session_state['current_schedule'], default=custom_json_encoder)
+                    schedule_data = json.loads(schedule_json)
+
                     response = requests.post(
-                        f"{API_URL}/api/constraint/parse",
+                        f"{API_URL}/api/schedule/modify",
                         json={
-                            "teacher_name": teacher_name,
-                            "constraint_text": constraint_text
+                            "current_schedule": schedule_data,
+                            "user_message": user_input
                         },
-                        timeout=30
+                        timeout=60
                     )
 
                     if response.status_code == 200:
                         result = response.json()
-                        st.success("✅ Contrainte parsée avec succès!")
 
-                        st.json(result["parsed_constraint"])
+                        if result['success']:
+                            # Mettre à jour le planning
+                            st.session_state['current_schedule'] = result['modified_schedule']
+                            st.session_state['visual_html'] = result.get('visual_html', '')
+
+                            # Message de confirmation
+                            st.session_state['chat_history'].append({
+                                'role': 'assistant',
+                                'content': f"✅ {result['message']}"
+                            })
+                        else:
+                            st.session_state['chat_history'].append({
+                                'role': 'assistant',
+                                'content': f"❓ {result['message']}"
+                            })
                     else:
-                        st.error(f"❌ Erreur: {response.json().get('detail')}")
-
-                except requests.exceptions.ConnectionError:
-                    st.error("❌ Impossible de se connecter à l'API")
+                        st.session_state['chat_history'].append({
+                            'role': 'assistant',
+                            'content': f"❌ Erreur: {response.json().get('detail', 'Erreur inconnue')}"
+                        })
                 except Exception as e:
-                    st.error(f"❌ Erreur: {str(e)}")
-        else:
-            st.warning("⚠️ Veuillez entrer une contrainte")
+                    st.session_state['chat_history'].append({
+                        'role': 'assistant',
+                        'content': f"❌ Erreur de connexion: {str(e)}"
+                    })
+
+            st.rerun()
+
+    st.markdown('</div>', unsafe_allow_html=True)
 
 
-def modify_schedule_page():
-    st.header("🤖 Modifier le Planning - Agent IA")
+def save_validated_schedule():
+    """Sauvegarder un planning validé"""
+    if 'current_schedule' in st.session_state:
+        try:
+            schedule_id = st.session_state['current_schedule'].get('schedule_id')
 
-    st.markdown("""
-    Utilisez l'agent IA pour modifier votre planning en **langage naturel** !
-
-    **Exemples de commandes :**
-    - "Supprimer le cours de Prof_1 le lundi à 8h"
-    - "Déplacer le cours du mardi 10h au mercredi 14h"
-    - "Ajouter un cours de Prof_2 pour Classe A le jeudi de 9h à 10h30"
-    - "Changer la salle du cours de Prof_1 lundi 8h en Salle 5"
-    - "Supprimer tous les cours du vendredi"
-    """)
-
-    # Vérifier qu'un planning existe
-    if 'current_schedule' not in st.session_state or not st.session_state['current_schedule']:
-        st.warning("⚠️ Aucun planning n'a encore été généré. Veuillez d'abord générer un planning.")
-        return
-
-    current_schedule = st.session_state['current_schedule']
-
-    st.success(f"📅 Planning actif: **{current_schedule['schedule_id']}** ({len(current_schedule['slots'])} créneaux)")
-
-    # Zone de chat
-    st.markdown("---")
-    st.subheader("💬 Chat avec l'Agent Modificateur")
-
-    # Historique de conversation
-    if 'conversation_history' not in st.session_state:
-        st.session_state['conversation_history'] = []
-
-    # Afficher l'historique
-    for msg in st.session_state['conversation_history']:
-        if msg['role'] == 'user':
-            st.chat_message("user").write(msg['content'])
-        else:
-            st.chat_message("assistant").write(msg['content'])
-
-    # Input utilisateur
-    user_input = st.chat_input("Tapez votre demande de modification...")
-
-    if user_input:
-        # Ajouter le message utilisateur
-        st.session_state['conversation_history'].append({
-            'role': 'user',
-            'content': user_input
-        })
-
-        st.chat_message("user").write(user_input)
-
-        # Appeler l'API
-        with st.spinner("L'agent analyse votre demande..."):
-            try:
-                # Convertir le schedule en JSON puis le recharger pour éviter les problèmes de sérialisation
-                schedule_json = json.dumps(current_schedule, default=custom_json_encoder)
-                schedule_data = json.loads(schedule_json)
-
-                response = requests.post(
-                    f"{API_URL}/api/schedule/modify",
-                    json={
-                        "current_schedule": schedule_data,
-                        "user_message": user_input
-                    },
-                    timeout=60
-                )
-
-                if response.status_code == 200:
-                    result = response.json()
-
-                    if result['success']:
-                        # Mise à jour du planning
-                        st.session_state['current_schedule'] = result['modified_schedule']
-
-                        # Message de confirmation
-                        confirmation_msg = f"{result['message']}\n\n**Action effectuée:** {result['action_taken']['action']}"
-                        st.session_state['conversation_history'].append({
-                            'role': 'assistant',
-                            'content': confirmation_msg
-                        })
-
-                        st.chat_message("assistant").write(confirmation_msg)
-
-                        # Afficher le nouveau planning
-                        if result.get("visual_html"):
-                            st.markdown("### 📊 Planning Mis à Jour")
-                            st.components.v1.html(result["visual_html"], height=600, scrolling=True)
-
-                        # Télécharger
-                        st.download_button(
-                            label="📥 Télécharger le planning modifié",
-                            data=json.dumps(result["modified_schedule"], indent=2, default=custom_json_encoder),
-                            file_name=f"{result['modified_schedule']['schedule_id']}.json",
-                            mime="application/json"
-                        )
-
-                    else:
-                        # Clarification nécessaire
-                        clarification_msg = result['message']
-                        st.session_state['conversation_history'].append({
-                            'role': 'assistant',
-                            'content': clarification_msg
-                        })
-                        st.chat_message("assistant").write(clarification_msg)
-
-                else:
-                    error_detail = response.json().get('detail', 'Erreur inconnue')
-                    st.error(f"❌ Erreur: {error_detail}")
-
-            except requests.exceptions.ConnectionError:
-                st.error("❌ Impossible de se connecter à l'API")
-            except Exception as e:
-                st.error(f"❌ Erreur: {str(e)}")
-
-
-def history_page():
-    st.header("📚 Historique des Plannings Sauvegardés")
-
-    # Récupérer la liste des plannings
-    try:
-        response = requests.get(f"{API_URL}/api/schedules", timeout=10)
-
-        if response.status_code == 200:
-            data = response.json()
-            schedules = data.get("schedules", [])
-
-            if not schedules:
-                st.info("Aucun planning enregistré pour le moment. Générez-en un pour le voir apparaître ici !")
+            if not schedule_id:
+                st.error("❌ ID du planning manquant")
                 return
 
-            st.success(f"📊 {data['count']} planning(s) trouvé(s)")
+            response = requests.post(
+                f"{API_URL}/api/schedule/validate",
+                json={"schedule_id": schedule_id, "validated_by": "user"},
+                timeout=30
+            )
 
-            # Afficher sous forme de tableau
-            for schedule in schedules:
-                with st.expander(f"📅 {schedule['schedule_id']} - Créé le {schedule['created_at'][:19]}"):
-                    col1, col2, col3 = st.columns([2, 2, 1])
+            if response.status_code == 200:
+                st.success("✅ Planning validé et sauvegardé !")
+                st.session_state['schedule_validated'] = True
+            else:
+                st.error(f"❌ Erreur: {response.json().get('detail', 'Erreur inconnue')}")
+        except Exception as e:
+            st.error(f"❌ Erreur: {str(e)}")
 
-                    with col1:
-                        st.write(f"**Créneaux:** {schedule['num_slots']}")
-                        st.write(f"**Salles:** {schedule['configuration']['num_rooms']}")
 
-                    with col2:
-                        st.write(f"**Professeurs:** {schedule['configuration']['num_teachers']}")
-                        st.write(f"**Classes:** {schedule['configuration']['num_classes']}")
+def delete_current_schedule():
+    """Supprimer le planning actuel"""
+    if 'current_schedule' in st.session_state:
+        try:
+            schedule_id = st.session_state['current_schedule'].get('schedule_id')
+            if schedule_id:
+                response = requests.delete(f"{API_URL}/api/schedules/{schedule_id}", timeout=10)
+                if response.status_code == 200:
+                    st.success("✅ Planning supprimé")
+                else:
+                    st.warning("⚠️ Impossible de supprimer")
+        except Exception as e:
+            st.warning(f"⚠️ Erreur: {str(e)}")
 
-                    with col3:
-                        if st.button("👁️ Voir", key=f"view_{schedule['schedule_id']}"):
-                            # Charger le planning complet
-                            detail_response = requests.get(
-                                f"{API_URL}/api/schedules/{schedule['schedule_id']}",
-                                timeout=10
-                            )
+        # Nettoyer la session
+        if 'current_schedule' in st.session_state:
+            del st.session_state['current_schedule']
+        if 'visual_html' in st.session_state:
+            del st.session_state['visual_html']
+        st.rerun()
 
-                            if detail_response.status_code == 200:
-                                detail_data = detail_response.json()
 
-                                # Stocker dans la session
-                                st.session_state['current_schedule'] = detail_data['schedule']
+def handle_generation(action_data):
+    """Gérer la génération d'un nouveau planning"""
+    with st.spinner("🔄 Génération du planning en cours..."):
+        try:
+            config = action_data['configuration']
 
-                                # Afficher
-                                st.success(f"✅ Planning {schedule['schedule_id']} chargé!")
+            request_data = {
+                "configuration": {
+                    **config,
+                    "lunch_break_start": config.get('lunch_start'),
+                    "lunch_break_end": config.get('lunch_end'),
+                    "max_hours_per_day_per_teacher": config.get('max_hours_per_day'),
+                    "prevent_same_teacher_parallel": config.get('prevent_parallel'),
+                    "max_consecutive_sessions": config.get('max_consecutive')
+                },
+                "teacher_workloads": action_data['teacher_workloads'],
+                "structured_availabilities": action_data['structured_availabilities']
+            }
 
-                                if detail_data.get("visual_html"):
-                                    st.components.v1.html(detail_data["visual_html"], height=800, scrolling=True)
+            response = requests.post(
+                f"{API_URL}/api/schedule/generate",
+                json=request_data,
+                timeout=60
+            )
 
-                                # Télécharger
-                                st.download_button(
-                                    label="📥 Télécharger (JSON)",
-                                    data=json.dumps(detail_data["schedule"], indent=2, default=custom_json_encoder),
-                                    file_name=f"{schedule['schedule_id']}.json",
-                                    mime="application/json",
-                                    key=f"dl_{schedule['schedule_id']}"
-                                )
+            if response.status_code == 200:
+                result = response.json()
 
-                        if st.button("🗑️ Supprimer", key=f"del_{schedule['schedule_id']}"):
-                            # Confirmer la suppression
-                            if st.button("⚠️ Confirmer suppression", key=f"conf_{schedule['schedule_id']}"):
-                                delete_response = requests.delete(
-                                    f"{API_URL}/api/schedules/{schedule['schedule_id']}",
-                                    timeout=10
-                                )
+                st.session_state['current_schedule'] = result['schedule']
+                st.session_state['visual_html'] = result.get('visual_html', '')
+                st.session_state['schedule_validated'] = False
 
-                                if delete_response.status_code == 200:
-                                    st.success("✅ Planning supprimé!")
-                                    st.rerun()
-                                else:
-                                    st.error("❌ Erreur lors de la suppression")
+                st.success(f"✅ {result['message']}")
+                st.balloons()
+                st.rerun()
+            else:
+                st.error(f"❌ Erreur: {response.json().get('detail', 'Erreur inconnue')}")
 
-        else:
-            st.error(f"❌ Erreur: {response.status_code}")
+        except requests.exceptions.ConnectionError:
+            st.error("❌ Impossible de se connecter à l'API. Assurez-vous que le backend est lancé sur le port 8000.")
+        except Exception as e:
+            st.error(f"❌ Erreur: {str(e)}")
 
-    except requests.exceptions.ConnectionError:
-        st.error("❌ Impossible de se connecter à l'API")
-    except Exception as e:
-        st.error(f"❌ Erreur: {str(e)}")
+
+def main():
+    # Injecter le CSS personnalisé
+    inject_custom_css()
+
+    # Layout en 3 colonnes
+    col1, col2, col3 = st.columns([1.2, 2.5, 1.3], gap="medium")
+
+    # Colonne gauche : Configuration
+    with col1:
+        action = configuration_panel()
+
+    # Colonne milieu : Planning
+    with col2:
+        planning_view()
+
+    # Colonne droite : Chat Agent
+    with col3:
+        chat_panel()
+
+    # Traiter l'action de génération
+    if action and action['action'] == 'generate':
+        handle_generation(action)
 
 
 if __name__ == "__main__":
