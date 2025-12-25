@@ -12,8 +12,8 @@ from .tools import (
     BaseTool,
     ToolResult,
     DeleteSlotTool,
+    AddSlotTool,
     # MoveSlotTool,
-    # AddSlotTool,
     # ModifySlotTool,
     # UpdateConfigTool,
     # RegenerateScheduleTool,
@@ -61,9 +61,9 @@ class ToolBasedScheduleAgent:
         """
         return [
             DeleteSlotTool(),
-            # MoveSlotTool(),
-            # AddSlotTool(),
-            # ModifySlotTool(),
+            AddSlotTool(),
+            # MoveSlotTool(),  # TODO: À implémenter
+            # ModifySlotTool(),  # TODO: À implémenter
             # UpdateConfigTool(),
             # RegenerateScheduleTool(),
             # QueryScheduleTool()
@@ -103,12 +103,11 @@ RÈGLES IMPORTANTES:
 
 TOOLS DISPONIBLES:
 - DeleteSlotTool: Supprimer un ou plusieurs créneaux
-- MoveSlotTool: Déplacer un créneau vers un autre moment
 - AddSlotTool: Ajouter un nouveau créneau
-- ModifySlotTool: Modifier les détails d'un créneau (salle, prof, etc.)
-- UpdateConfigTool: Modifier la configuration du système
-- RegenerateScheduleTool: Régénérer une partie du planning
-- QueryScheduleTool: Rechercher des informations dans le planning
+
+TOOLS À VENIR:
+- MoveSlotTool: Déplacer un créneau vers un autre moment (prochainement)
+- ModifySlotTool: Modifier les détails d'un créneau (prochainement)
 
 FORMAT DES RÉPONSES:
 - Utilise TOUJOURS les tools quand c'est approprié
