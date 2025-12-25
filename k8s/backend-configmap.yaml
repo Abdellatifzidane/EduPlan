@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: edupplan-backend-config
+  namespace: edupplan
+data:
+  # API
+  API_HOST: "0.0.0.0"
+  API_PORT: "8000"
+  DEBUG: "true"
+
+  # Postgres (non sensible)
+  #POSTGRES_HOST: "postgres"
+  #POSTGRES_PORT: "5432"
+
+  # Redis
+  #REDIS_HOST: "redis"
+  #REDIS_PORT: "6379"
+  # Environnement
+  ENV: "dev"

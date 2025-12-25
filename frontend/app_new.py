@@ -5,7 +5,7 @@ from datetime import time, datetime
 import json
 import plotly.graph_objects as go
 from typing import Dict, List, Any
-
+import os
 
 def custom_json_encoder(obj):
     """Encodeur JSON personnalisé pour gérer les objets time et datetime"""
@@ -22,7 +22,7 @@ st.set_page_config(
 )
 
 # URL de l'API
-API_URL = "http://localhost:8000"
+API_URL = API_URL = os.getenv("API_URL", "http://backend:8000") #"http://backend:8000"
 
 # CSS personnalisé pour un design moderne et épuré
 def inject_custom_css():

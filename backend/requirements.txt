@@ -7,7 +7,7 @@ pydantic-settings==2.1.0
 # Base de données SQLite (intégré à Python)
 sqlalchemy==2.0.25
 alembic==1.13.1
-
+psycopg2-binary==2.9.9
 # Résolution de contraintes
 ortools==9.8.3296
 

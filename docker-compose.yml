@@ -51,7 +51,7 @@ services:
       # Redis
       REDIS_URL: redis://redis:6379
       # API Keys (à remplacer par vos vraies clés)
-      GROQ_API_KEY: ${GROQ_API_KEY}
+      GROQ_API_KEY: "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"
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       XAI_API_KEY: ${XAI_API_KEY}
       # Configuration
