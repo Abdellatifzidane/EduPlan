@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: edupplan-frontend
-          image: gcr.io/total-casing-477316-s1/edupplan-frontend:v2
+          image: gcr.io/total-casing-477316-s1/edupplan-frontend:v3
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8501

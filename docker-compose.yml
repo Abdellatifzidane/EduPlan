@@ -1,7 +1,5 @@
-version: '3.8'
-
 services:
-  # PostgreSQL pour stockage persistant
+  # PostgreSQL
   postgres:
     image: postgres:15-alpine
     container_name: eduplan_postgres
@@ -14,15 +12,13 @@ services:
       - ./backend/data/init.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
       - "5432:5432"
-    networks:
-      - eduplan_network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U eduplan_user"]
+      test: ["CMD-SHELL", "pg_isready -U eduplan_user -d eduplan_db"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # Redis pour cache et sessions
+  # Redis
   redis:
     image: redis:7-alpine
     container_name: eduplan_redis
@@ -31,33 +27,28 @@ services:
       - redis_data:/data
     ports:
       - "6379:6379"
-    networks:
-      - eduplan_network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # Backend API FastAPI
+  # Backend FastAPI
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: eduplan_backend
     environment:
-      # Database
       DATABASE_URL: postgresql://eduplan_user:eduplan_password@postgres:5432/eduplan_db
-      # Redis
       REDIS_URL: redis://redis:6379
-      # API Keys (à remplacer par vos vraies clés)
-      GROQ_API_KEY: ""
+      GROQ_API_KEY: "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"
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       XAI_API_KEY: ${XAI_API_KEY}
-      # Configuration
       API_HOST: 0.0.0.0
       API_PORT: 8000
       DEBUG: "true"
+      PYTHONPATH: /app
     volumes:
       - ./backend:/app
     ports:
@@ -67,8 +58,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    networks:
-      - eduplan_network
     command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
 
   # Frontend Streamlit
@@ -87,37 +76,7 @@ services:
       - "8501:8501"
     depends_on:
       - backend
-    networks:
-      - eduplan_network
-    command: streamlit run app_new.py --server.port 8501 --server.address 0.0.0.0
-
-  # Adminer pour gérer PostgreSQL (optionnel)
-  adminer:
-    image: adminer:latest
-    container_name: eduplan_adminer
-    ports:
-      - "8080:8080"
-    depends_on:
-      - postgres
-    networks:
-      - eduplan_network
-
-  # Redis Commander pour visualiser Redis (optionnel)
-  redis-commander:
-    image: rediscommander/redis-commander:latest
-    container_name: eduplan_redis_commander
-    environment:
-      REDIS_HOSTS: local:redis:6379
-    ports:
-      - "8081:8081"
-    depends_on:
-      - redis
-    networks:
-      - eduplan_network
-
-networks:
-  eduplan_network:
-    driver: bridge
+    command: streamlit run app.py --server.port 8501 --server.address 0.0.0.0
 
 volumes:
   postgres_data:

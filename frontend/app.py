@@ -5,7 +5,7 @@ from datetime import time, datetime
 import json
 import plotly.graph_objects as go
 from typing import Dict, List, Any
-
+import os
 
 def custom_json_encoder(obj):
     """Encodeur JSON personnalisé pour gérer les objets time et datetime"""
@@ -22,7 +22,7 @@ st.set_page_config(
 )
 
 # URL de l'API
-API_URL = "http://localhost:8000"
+API_URL = os.getenv("API_URL", "http://backend:8000")
 
 # CSS personnalisé pour une interface moderne en 3 colonnes
 def inject_custom_css():
@@ -238,6 +238,37 @@ def inject_custom_css():
         border-radius: 10px;
         padding: 1rem;
         margin: 0.5rem 0;
+    }
+                    /* 1) Expander: titre + contenu */
+    details summary,
+    details summary * {
+        color: #111 !important;
+    }
+
+    details div[data-testid="stMarkdownContainer"],
+    details div[data-testid="stMarkdownContainer"] * {
+        color: #111 !important;
+    }
+
+    /* 2) Labels des widgets (NumberInput/TimeInput/etc.) */
+    div[data-testid="stWidgetLabel"] *,
+    label, label * {
+        color: #111 !important;
+    }
+
+    /* 3) Alerts (error/warning/info/success) */
+    div[data-testid="stAlert"] *,
+    div[role="alert"] * {
+        color: #111 !important;
+    }
+
+    /* 4) Inputs (texte et placeholder) */
+    input, textarea {
+        color: #111 !important;
+    }
+    input::placeholder, textarea::placeholder {
+        color: #666 !important;
+        opacity: 1 !important;
     }
 
     /* Hide unnecessary elements */

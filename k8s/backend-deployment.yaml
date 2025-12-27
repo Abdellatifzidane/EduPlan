@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: edupplan-backend
-          image: gcr.io/total-casing-477316-s1/edupplan-backend:v1
+          image: gcr.io/total-casing-477316-s1/edupplan-backend:v3
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
