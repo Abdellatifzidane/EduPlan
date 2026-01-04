@@ -9,7 +9,6 @@ spec:
   rules:
     - http:
         paths:
-          # Frontend Streamlit sur /
           - path: /
             pathType: Prefix
             backend:
@@ -17,11 +16,3 @@ spec:
                 name: edupplan-frontend-service
                 port:
                   number: 8501
-          # Backend FastAPI Swagger sur /docs
-          - path: /docs
-            pathType: Prefix
-            backend:
-              service:
-                name: edupplan-backend-service
-                port:
-                  number: 8000
