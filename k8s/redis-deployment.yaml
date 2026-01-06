@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: edupplan-redis
+  namespace: edupplan
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: edupplan-redis
+  template:
+    metadata:
+      labels:
+        app: edupplan-redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+
+
+# cache simple sans persistance 
